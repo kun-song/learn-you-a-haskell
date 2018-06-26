@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
 -- 函数定义
 doubleMe x = x + x
@@ -12,3 +13,19 @@ doubleSmallNumber' x = (if x > 100 then x else x * 2) + 1
 
 song'kun = "it's me Song Kun"
 
+boomBang xs = [if x > 10 then "BANG" else "BOOM" | x <- xs, odd x]
+
+length' :: [a] -> Int
+length' xs = sum [1 | _ <- xs]
+
+removeNoUppercase :: String -> String
+removeNoUppercase s = [x | x <- s, x `elem` ['A' .. 'Z']]
+
+removeOdd :: [[Int]] -> [[Int]]
+removeOdd xss = [[x | x <- xs, even x] | xs <- xss]
+
+fst' :: (a, b) -> a
+fst' (x, _) = x
+
+snd' :: (a, b) -> b
+snd' (_, y) = y
