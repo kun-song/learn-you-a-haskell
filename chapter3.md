@@ -295,3 +295,41 @@ GHCi 中，可以省略 `let` 表达式的 `in` 部分，此时 `let` 中的名�
 
 ## case 表达式
 
+Java 中的 match 语句只能根据具体值选择执行分支，而 Haskell 的 case 表达式可以根据 **模式匹配** 选择分支。
+
+case 表达式语法：
+
+```Haskell
+case expression of pattern -> result  
+                   pattern -> result  
+                   pattern -> result  
+                   ...  
+```
+
+>若模式都匹配完了，但没有合适的，抛出运行时异常。
+
+函数定义时对参数进行的模式匹配是 case 表达式的语法糖：
+
+```Haskell
+head' :: [a] -> a
+head' []      = error "empty on []!"
+head' (x : _) = x
+```
+
+等价于：
+
+```Haskell
+head' :: [a] -> a
+head' xs = case xs of
+  []      -> error "empty on []!"
+  (x : _) -> x
+```
+
+模式匹配也是表达式：
+
+```Haskell
+describeList :: [a] -> String  
+describeList xs = "The list is " ++ case xs of [] -> "empty."  
+                                               [x] -> "a singleton list."   
+                                               xs -> "a longer list." 
+```
