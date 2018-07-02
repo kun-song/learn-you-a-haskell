@@ -476,3 +476,62 @@ CallStack (from HasCallStack):
 
 ## 类型别名
 
+前面说过 `[Char]` 和 `String` 等价，可以互换，因为 `String` 只是 `[Char]` 的类型别名：
+
+```Haskell
+type String = [Char]  
+```
+
+类型别名唯一作用：提升可读性。例如 `toUpperString` 将字符串全部转换为大写，它的类型既可以是 `toUpperString :: [Char] -> [Char]`，也可以是 `tpUpperString :: String -> String`，但后者明显更加可读。
+
+再如：
+
+```Haskell
+phoneBook :: [(String,String)]  
+phoneBook =      
+    [("betty","555-2938")     
+    ,("bonnie","452-2928")     
+    ,("patsy","493-2928")     
+    ,("lucille","205-2928")     
+    ,("wendy","939-8282")     
+    ,("penny","853-2492")     
+    ]  
+```
+
+创建类型别名：
+
+```Haskell
+type PhoneBook = [(String, String)]
+```
+
+现在 `phoneBook` 类型就是 `PhoneBook` 了。
+
+继续创建别名：
+
+```Haskell
+type Name = String
+type PhoneNumber = String
+type PhoneBook = [(Name, PhoneNumber)]
+```
+
+可读性更高！
+
+函数 `inPhoneBook` 判断给定名字、电话是否在电话本中，由于前面定义了类型别名，该函数的类型非常清晰：
+
+```Haskell
+inPhoneBook :: Name -> PhoneNumber -> PhoneBook -> Bool
+inPhoneBook name pnumber pbook = (name,pnumber) `elem` pbook
+```
+
+如果没有类型别名，`inPhoneBook` 类型为 `String -> String -> [(String,String)] -> Bool`，类型携带的信息非常少了。
+
+
+
+
+
+
+
+
+
+
+
