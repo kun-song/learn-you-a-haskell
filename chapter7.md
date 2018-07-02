@@ -364,5 +364,115 @@ read "Just 'x'" :: Maybe a
 Just 'x'
 ```
 
+也可以自动派生 `Ord` typeclass 的实例，规则为：
 
+* 若两个值的 value constructor 不同，则 `data` 中先定义的 value constructor 构造的值小于后定义的 value constructor；
+* 若两个值的 value constructor 相同，则根据字段比较；
+
+例如：
+
+```Haskell
+data Bool = False | True deriving (Ord)
+```
+
+因为 `False` 先于 `True` 被定义，所以 `Fasle` 值小于 `True`：
+
+```Haskell
+ghci> True `compare` False  
+GT  
+ghci> True > False  
+True  
+ghci> True < False  
+False
+```
+
+而 `Maybe a` 中，`Nothing` 先于 `Just` 被定义，因此 `Nothing` 总是小于 `Just` 构造的值：
+
+```Haskell
+ghci> Nothing < Just 100  
+True  
+ghci> Nothing > Just (-49999)  
+False  
+ghci> Just 3 `compare` Just 2  
+GT  
+ghci> Just 100 > Just 50  
+True  
+```
+
+两个 `Just` 构造的值比较时，`a` 必须也是 `Ord` 才行，因为函数类型不是 `Ord`，所以 `Just (* 3) > Just (* 2)` 是不合法的。
+
+### `Enum` + `Bounded`
+
+借助 algebraic data types + `Enum` + `Bounded` 可以很容易创建枚举。
+
+```Haskell
+data Day = Monday | Tuesday | Wednesday | Thursday | Friday | Staturday | Sunday
+```
+
+`Day` 类型的 7 个 value constructor 都没有参数，所以可以让 `Day` 变成 `Enum` 的一部分：
+
+* `Enum` 是有前驱、后继的类型
+* `Bounded` 是有最大、最小值的类型
+
+```Haskell
+data Day = Monday | Tuesday | Wednesday | Thursday | Friday | Staturday | Sunday
+  deriving (Eq, Ord, Show, Read, Bounded, Enum)
+```
+
+因为 `Day` 是 `Show` 和 `Read` typeclass 的成员，因此可以将 `Day` 值转换为字符串，也可以将字符串转换为 `Day` 类型的值：
+
+```Haskell
+λ> show Sunday
+"Sunday"
+λ> read "Sunday" :: Day
+Sunday
+```
+
+因为 `Day` 是 `Eq` typeclass 的成员，因此可以比较 `Day` 值是否相等：
+
+```Haskell
+λ> Sunday == Sunday
+True
+λ> Sunday == Monday
+False
+λ> Sunday /= Monday
+True
+```
+
+`Day` 是 `Ord` typeclass 的成员，因此可以用 `>`、`>=`、`<`、`compare` 等比较 `Day` 值的大小顺序：
+
+```Haskell
+λ> Monday > Tuesday
+False
+λ> Monday < Tuesday
+True
+λ> Monday `compare` Tuesday
+LT
+```
+
+`Day` 是 `Bounded` typeclass 的成员，因此可以获取其上下边界：
+
+```Haskell
+λ> minBound :: Day
+Monday
+λ> maxBound :: Day
+Sunday
+```
+
+`Day` 是 `Enum` typeclass 的成员，因此可以获取其前驱、后继，更重要的是可创建 `Range`：
+
+```Haskell
+λ> succ Monday
+Tuesday
+λ> pred Monday
+*** Exception: pred{Day}: tried to take `pred' of first tag in enumeration
+CallStack (from HasCallStack):
+  error, called at /Users/satansk/Projects/github/learn-you-a-haskell/ch7.hs:33:43 in main:Main
+λ> [Monday .. Sunday]
+[Monday,Tuesday,Wednesday,Thursday,Friday,Staturday,Sunday]
+λ> [minBound .. maxBound] :: [Day]
+[Monday,Tuesday,Wednesday,Thursday,Friday,Staturday,Sunday]
+```
+
+## 类型别名
 

@@ -29,4 +29,6 @@ data Student = Student { firstName :: String
                        }
                deriving (Eq, Show, Read)
 
+data Day = Monday | Tuesday | Wednesday | Thursday | Friday | Staturday | Sunday
+  deriving (Eq, Ord, Show, Read, Bounded, Enum)
 
