@@ -1,3 +1,4 @@
+import Data.Map
 
 data Point = Point Float Float deriving (Show)
 
@@ -32,3 +33,34 @@ data Student = Student { firstName :: String
 data Day = Monday | Tuesday | Wednesday | Thursday | Friday | Staturday | Sunday
   deriving (Eq, Ord, Show, Read, Bounded, Enum)
 
+type Name = String
+type PhoneNumber = String
+type PhoneBook = [(Name, PhoneNumber)]
+
+inPhoneBook :: Name -> PhoneNumber -> PhoneBook -> Bool
+inPhoneBook name number book = (name, number) `elem` book
+
+type AssocList k v = [(k, v)]
+
+type IntMap = Map Int
+
+data LockerState = Taken | Free deriving (Show, Eq)
+type Code = String
+type LockerMap = Map Int (LockerState, Code)
+
+lockerLookup :: Int -> LockerMap -> Either String Code
+lockerLookup lockerNumber map =
+  case Data.Map.lookup lockerNumber map of
+    Nothing            -> Left $ "Locker number" ++ show lockerNumber ++ " doesn't exists!"
+    Just (state, code) -> if state /= Taken
+                          then Right code
+                          else Left $ "Locker " ++ show lockerNumber ++ " is taken!"
+
+infixr 5 :-:
+data List' a = Empty | a :-: (List' a)
+  deriving (Show, Read, Eq, Ord)
+
+infixr 5 .++
+(.++) :: List' a -> List' a -> List' a
+Empty .++ ys      = ys
+(x :-: xs) .++ ys = x :-: (xs .++ ys)

@@ -525,9 +525,164 @@ inPhoneBook name pnumber pbook = (name,pnumber) `elem` pbook
 
 如果没有类型别名，`inPhoneBook` 类型为 `String -> String -> [(String,String)] -> Bool`，类型携带的信息非常少了。
 
+### 类型参数 + 类型别名
 
+类型别名也可以有类型参数，例如：
 
+```Haskell
+type AssocList k v = [(k, v)]
+```
 
+* 根据 key 查询对应 value 的函数的类型可以是：`(Eq k) => k -> AssocList k v -> Maybe v`
+* `AssocList` 是一个 type constructor，接受两个 type 作为参数，产生一个 concrete type，例如 `AssocList Int String`
+
+>Haskell 中，value 的类型只能是 concrete type，例如 `Maybe Int`，`Maybe` 是 type constructor，不存在 `Maybe` 类型的值。
+
+Just like we can partially apply functions to get new functions, we can partially apply **type constructors** to get new type constructors from them!
+
+例如：
+
+```Haskell
+type IntMap v = Map Int v
+```
+
+或：
+
+```Haskell
+type IntMap = Map Int
+```
+
+* 首先 `import Data.Map`
+
+`Either a b` 有两个 type 参数：
+
+```Haskell
+data Either a b = Left a | Right b deriving (Eq, Ord, Read, Show)
+```
+
+* `Either` 有两个 value constructor
+
+```Haskell
+λ> Right 20
+Right 20
+λ> :t Right 20
+Right 20 :: Num b => Either a b
+λ> Left "error"
+Left "error"
+λ> :t Left "error"
+Left "error" :: Either [Char] b
+```
+
+到目前为止，我们使用 `Maybe a` 表示可能失败的计算的结果，但失败时，只能获取一个 `Nothing`，没有关于失败的任何信息。
+
+当函数只会由于一种原因失败时，这没问题，但若有多种原因都可以导致失败，则 `Nothing` 就太单薄了，此时可以用 `Either a b`。
+
+```Haskell
+data LockerState = Taken | Free deriving (Show, Eq)
+type Code = String
+type LockerMap = Map Int (LockerState, Code)
+
+lockerLookup :: Int -> LockerMap -> Either String Code
+lockerLookup lockerNumber map =
+  case Data.Map.lookup lockerNumber map of
+    Nothing            -> Left $ "Locker number" ++ show lockerNumber ++ " doesn't exists!"
+    Just (state, code) -> if state /= Taken
+                          then Right code
+                          else Left $ "Locker " ++ show lockerNumber ++ " is taken!"
+```
+
+使用：
+
+```Haskell
+λ> lockerLookup 10 (Data.Map.fromList [(10, (Taken, "10x"))])
+Left "Locker 10 is taken!"
+λ> lockerLookup 11 (Data.Map.fromList [(10, (Taken, "10x"))])
+Left "Locker number11 doesn't exists!"
+λ> lockerLookup 10 (Data.Map.fromList [(10, (Free, "10x"))])
+Right "10x"
+```
+
+## 递归数据结构
+
+### list
+
+value constructor 的类型字段可以是本身 type，从而构成递归数据结构：
+
+```Haskell
+data List' a = Empty | Cons a (List' a)
+  deriving (Show, Read, Eq, Ord)
+
+λ> 1 `Cons` (2 `Cons` (3 `Cons` (4 `Cons` Empty)))
+Cons 1 (Cons 2 (Cons 3 (Cons 4 Empty)))
+```
+
+* `Cons` 类似 `:`，而 `Empty` 类似 `[]`
+
+通过反引号，可以让 `Cons` 变成中缀操作符，若函数全部由 **特殊字符** 组成，则函数自动中缀，value constructor 也是函数，所以：
+
+```Haskell
+data List' a = Empty | a :-: (List' a)
+  deriving (Show, Read, Eq, Ord)
+
+λ> 1 :-: Empty
+1 :-: Empty
+λ> 1 :-: (2 :-: Empty)
+1 :-: (2 :-: Empty)
+```
+
+`:-:` 默认是左结合的，使用并不方便，使其变成右结合：
+
+```Haskell
+infixr 5 :-:
+data List' a = Empty | a :-: (List' a)
+  deriving (Show, Read, Eq, Ord)
+
+λ> 1 :-: 2 :-: Empty
+1 :-: (2 :-: Empty)
+```
+
+`infixr 5 :-:` 是 fixity 声明，决定 `:-:` 操作符的：
+
+* 结合性：`infixr` 右结合，`infixl` 左结合；
+* 优先级
+
+每个操作符有定义一个数字，例如 `+` fixity 声明为 `infixl 6`，因此 `+` 优先级比 `:-:` 高，所以：
+
+```Haskell
+λ> 1 :-: 2 :-: 1 + 2 :-: Empty
+1 :-: (2 :-: (3 :-: Empty))
+```
+
+list 拼接，标准库定义有 `++`：
+
+```Haskell
+infixr 5 ++
+(++) :: [a] -> [a] -> [a]
+[] ++ ys       = ys
+(x : xs) ++ ys = x : (xs ++ ys)
+```
+
+将其改写为 `List'`：
+
+```Haskell
+infixr 5 .++
+(.++) :: List' a -> List' a -> List' a
+Empty .++ ys      = ys
+(x :-: xs) .++ ys = x :-: (xs .++ ys)
+
+λ> let xs = 1 :-: 2 :-: Empty
+λ> let ys = 3 :-: 4 :-: Empty
+λ> xs .++ ys
+1 :-: (2 :-: (3 :-: (4 :-: Empty)))
+```
+
+* `.++` 中，对 `Empty` 和 `(x :-: xs)` 进行模式匹配，因为模式匹配可用于 value constructor，所以是合法的；
+
+实际上，可以为 `List' a` 实现所有 list 操作函数。
+
+### binary search tree
+
+二叉查找树很有用，`Data.Set` 和 `Data.Map` 是基于平衡二叉查找树构建的。
 
 
 
