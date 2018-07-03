@@ -64,3 +64,72 @@ infixr 5 .++
 (.++) :: List' a -> List' a -> List' a
 Empty .++ ys      = ys
 (x :-: xs) .++ ys = x :-: (xs .++ ys)
+
+data Tree a = EmptyTree | Node a (Tree a) (Tree a)
+  deriving (Show, Read, Eq)
+
+singleton' :: a -> Tree a
+singleton' x = Node x EmptyTree EmptyTree
+
+treeInsert :: (Ord a) => Tree a -> a -> Tree a
+treeInsert EmptyTree x           = singleton' x
+treeInsert (Node v left right) x
+  | x == v    = Node v left right
+  | x < v     = Node v (treeInsert left x) right
+  | otherwise = Node v left (treeInsert right x)
+
+treeElem :: (Ord a) => Tree a -> a -> Bool
+treeElem EmptyTree _  = False
+treeElem (Node v l r) x
+  | x == v = True
+  | x < v  = treeElem l x
+  | x > v  = treeElem r x
+
+class Eq' a where
+  (.==) :: a -> a -> Bool
+  (./=) :: a -> a -> Bool
+  x .== y = not (x ./= y)
+  x ./= y = not (x .== y)
+
+data TrafficLight = Red | Yellow | Green
+
+instance Eq TrafficLight where
+  Red == Red = True
+  Yellow == Yellow = True
+  Green == Green = True
+  _ == _ = False
+
+instance Show TrafficLight where
+  show Red    = "Red light"
+  show Yellow = "Yellow light"
+  show Green  = "Green light"
+
+class YesNo a where
+  yesno :: a -> Bool
+
+instance YesNo Int where
+  yesno 0 = False
+  yesno _ = True
+
+instance YesNo [a] where
+  yesno [] = False
+  yesno _  = True
+
+instance YesNo Bool where
+  yesno = id
+
+instance YesNo (Maybe a) where
+  yesno Nothing = False
+  yesno _       = True
+
+instance YesNo (Tree a) where
+  yesno EmptyTree = False
+  yesno _         = True
+
+instance YesNo TrafficLight where
+  yesno Red = False
+  yesno _   = True
+
+if' :: (YesNo a) => a -> b -> b -> b
+if' yn x y = if (yesno yn) then x else y
+

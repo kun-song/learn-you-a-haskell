@@ -684,9 +684,225 @@ Empty .++ ys      = ys
 
 二叉查找树很有用，`Data.Set` 和 `Data.Map` 是基于平衡二叉查找树构建的。
 
+与 list 类似，tree 天然递归：
 
+```Haskell
+data Tree a = EmptyTree | Node a (Tree a) (Tree a)
+  deriving (Show, Read, Eq)
+```
 
+* 假设 `Tree` 是二叉查找树，即左子树的值小于根节点，右子树的值大于根节点；
 
+实现 `treeInsert` 函数，将一个值插入树中，并保持二叉查找树的性质：
 
+```Haskell
+singleton' :: a -> Tree a
+singleton' x = Node x EmptyTree EmptyTree
 
+treeInsert :: (Ord a) => Tree a -> a -> Tree a
+treeInsert EmptyTree x           = singleton' x
+treeInsert (Node v left right) x
+  | x == v    = Node v left right
+  | x < v     = Node v (treeInsert left x) right
+  | otherwise = Node v left (treeInsert right x)
+```
+
+实现 `treeElem`，检查指定元素是否在 tree 中存在：
+
+```Haskell
+treeElem :: (Ord a) => Tree a -> a -> Bool
+treeElem EmptyTree _  = False
+treeElem (Node v l r) x
+  | x == v = True
+  | x < v  = treeElem l x
+  | x > v  = treeElem r x
+```
+
+使用 `foldl` 构建一棵树：
+
+```Haskell
+λ> let tree = Prelude.foldl treeInsert EmptyTree [8, 6, 4, 1, 7, 3, 5]
+λ> tree
+Node 8 (Node 6 (Node 4 (Node 1 EmptyTree (Node 3 EmptyTree EmptyTree)) (Node 5 EmptyTree EmptyTree)) (Node 7 EmptyTree EmptyTree)) EmptyTree
+```
+
+`treeElem`：
+
+```Haskell
+λ> treeElem tree 10
+False
+λ> treeElem tree 8
+True
+```
+
+## Typeclass 102
+
+前面通过 `deriving` 让 Haskell 编译器自动为 type 生成 typeclass instances，本节介绍如何手动创建 typeclass instance。
+
+>如果一个 type 是某个 typeclass 的 instance，意味着该 type 可以使用 typeclass 中定义的函数。
+
+`Eq` typeclass 定义可判等行为：
+
+```Haskell
+class Eq' a where
+  (.==) :: a -> a -> Bool
+  (./=) :: a -> a -> Bool
+  x .== y = not (x ./= y)
+  x ./= y = not (x .== y)
+```
+
+* `a` 实际为 `Eq` typeclass 的 instance type；
+
+如果某 type 的两个值可以判断是否相等，则可以将该 type 变成 `Eq` typeclass 的实例。
+
+假设有 ADT：
+
+```Haskell
+data TrafficLight = Red | Yellow | Green
+```
+
+将 `TrafficLight` 变成 `Eq` typeclass 的实例，需要：
+
+```Haskell
+instance Eq TrafficLight where
+  Red == Red = True
+  Yellow == Yellow = True
+  Green == Green = True
+  _ == _ = False
+```
+
+>* `class` 用于定义新的 typeclass
+>* `instance` 用于将特定 type 变成 typeclass 的实例（成员）
+
+要让 `TrafficLight` 变成 `Show` typeclass 的实例，需要：
+
+```Haskell
+instance Show TrafficLight where
+  show Red    = "Red light"
+  show Yellow = "Yellow light"
+  show Green  = "Green light"
+```
+
+验证：
+
+```Haskell
+λ> Red == Red
+True
+λ> Red == Yellow
+False
+λ> Red
+Red light
+λ> Yellow
+Yellow light
+λ> [Red, Yellow, Green]
+[Red light,Yellow light,Green light]
+```
+
+`elem` 类型为：
+
+```Haskell
+λ> :t elem
+elem :: (Eq a, Foldable t) => a -> t a -> Bool
+```
+
+因此 `TrafficLight` 可以使用 `elem`：
+
+```Haskell
+λ> Red `elem` [Red, Yellow, Green]
+True
+```
+
+### typeclass 子类化
+
+通过类型约束，可以让一个 typeclass 成为另一个 typeclass 的子类：
+
+```Haskell
+class (Eq a) => Num a where
+```
+
+它与：
+
+```Haskell
+class Num a where
+```
+
+基本相同，不过 `a` 必须是 `Eq` typeclass 的实例。
+
+即，一个 type 想要成为 `Num` typeclass 的实例，首先必须是 `Eq` typeclass 的实例。
+
+>子类，仅仅是类型约束的一种而已。
+
+### `Maybe`
+
+`Maybe` 是 type constructor，不是 concrete type，因此要让 `Maybe` 成为 `Eq` typeclass 的实例，需要：
+
+```Haskell
+instance (Eq m) => Eq (Maybe m) where
+  Just x == Just y = x == y
+  Nothing == Nothing = True
+  _ == _ = False
+```
+
+* `(Eq m) => ` 才能让 `x == y` 合法
+
+>:info 可以查看 typeclass 的所有实例，还可以查看某 ADT 属于哪些 typeclass，非常使用！
+
+## A yes-no typeclass
+
+```Haskell
+class YesNo a where
+  yesno :: a -> Bool
+```
+
+让很多 type 成为 `YesNo` typeclass 的实例：
+
+```Haskell
+instance YesNo Int where
+  yesno 0 = False
+  yesno _ = True
+
+instance YesNo [a] where
+  yesno [] = False
+  yesno _  = True
+
+instance YesNo Bool where
+  yesno = id
+
+instance YesNo (Maybe a) where
+  yesno Nothing = False
+  yesno _       = True
+
+instance YesNo (Tree a) where
+  yesno EmptyTree = False
+  yesno _         = True
+
+instance YesNo TrafficLight where
+  yesno Red = False
+  yesno _   = True
+```
+
+借助 `YesNo` 实现 `if'`：
+
+```Haskell
+if' :: (YesNo a) => a -> b -> b -> b
+if' yn x y = if (yesno yn) then x else y
+```
+
+测试：
+
+```Haskell
+    parse error (possibly incorrect indentation or mismatched brackets)
+λ> if' [] 1 2
+2
+λ> if' EmptyTree 1 2
+2
+λ> if' Red 1 2
+2
+λ> if' Yellow 1 2
+1
+```
+
+通过 `YesNo` typeclass，模式了动态语言特性。
+
+## `Functor` typeclass
 
