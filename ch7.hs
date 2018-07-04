@@ -133,3 +133,23 @@ instance YesNo TrafficLight where
 if' :: (YesNo a) => a -> b -> b -> b
 if' yn x y = if (yesno yn) then x else y
 
+
+
+class Functor' f where
+  fmap' :: (a -> b) -> f a -> f b
+
+instance Functor' [] where
+  fmap' = Prelude.map
+
+instance Functor' Maybe where
+  fmap' f Nothing  = Nothing
+  fmap' f (Just x) = Just $ f x
+
+instance Functor' Tree where
+  fmap' _ EmptyTree    = EmptyTree
+  fmap' f (Node v l r) = Node (f v) (fmap' f l) (fmap' f r)
+
+instance Functor' (Either a) where
+  fmap' _ (Left x)  = Left x
+  fmap' f (Right x) = Right $ f x
+

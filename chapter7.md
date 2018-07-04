@@ -906,3 +906,129 @@ if' yn x y = if (yesno yn) then x else y
 
 ## `Functor` typeclass
 
+`Functor` typeclass 是一切可以 map 的 type 集合，list 即其中一员：
+
+```Haskell
+class Functor f where
+  fmap :: (a -> b) -> f a -> f b
+```
+
+* `f` 是只有一个参数的 type constructor，而非 concrete type；
+
+`List.map` 类型为 `(a -> b) -> [a] -> [b]`，与 `fmap` 非常类似，可以轻易把 `List` 变成 `Functor` 的实例：
+
+```Haskell
+instance Functor' [] where
+  fmap' = Prelude.map
+```
+
+因此，对于 list 而言，`fmap` 和 `map` 完全等价：
+
+```Haskell
+λ> fmap' (+ 1) [1, 2, 3]
+[2,3,4]
+λ> Prelude.map (+ 1) [1, 2, 3]
+[2,3,4]
+```
+
+`Maybe` 也可视为 `Functor'` 的实例：
+
+```Haskell
+instance Functor' Maybe where
+  fmap' f Nothing  = Nothing
+  fmap' f (Just x) = Just $ f x
+```
+
+测试：
+
+```Haskell
+λ> fmap' (+ 1) (Just 10)
+Just 11
+λ> fmap' (+ 1) Nothing
+Nothing
+```
+
+`Tree` 也可视为 `Functor'` 实例：
+
+```Haskell
+instance Functor' Tree where
+  fmap' _ EmptyTree    = EmptyTree
+  fmap' f (Node v l r) = Node (f v) (fmap' f l) (fmap' f r)
+```
+
+测试：
+
+```Haskell
+λ> fmap' (+ 1) EmptyTree
+EmptyTree
+λ> fmap' (+ 1) $ Prelude.foldl treeInsert EmptyTree [1, 2, 3]
+Node 2 EmptyTree (Node 3 EmptyTree (Node 4 EmptyTree EmptyTree))
+```
+
+`Either a b` 也可以成为 `Functor'` 实例：
+
+```Haskell
+instance Functor' (Either a) where
+  fmap' _ (Left x)  = Left x
+  fmap' f (Right x) = Right $ f x
+```
+
+* `Functor'` 需要一个参数的 type constructor，而 `Either a b` 有两个，所以需要固定其中一个；
+
+>记住，type constructor 也可以部分应用，`Either a` 返回一个新的、接受一个类型的 type constructor。
+
+测试：
+
+```Haskell
+λ> fmap' (+ 1) $ Right 10
+Right 11
+λ> fmap' (+ 1) $ Left 10
+Left 10
+```
+
+## Kind 与无名类型
+
+value 有 type：
+
+```Haskell
+λ> :t 10
+10 :: Num t => t
+λ> :t fmap
+fmap :: Functor f => (a -> b) -> f a -> f b
+```
+
+* `fmap` 函数也是值
+
+type 有 kind：
+
+```Haskell
+λ> :k Int
+Int :: *
+```
+
+* `*` 表示该 type 为 concrete type；
+
+`Maybe`：
+
+```Haskell
+λ> :k Maybe
+Maybe :: * -> *
+```
+
+`* -> *` 表示接受一个 concrete type，并产生一个 concrete type；
+
+```Haskell
+λ> :k Maybe String
+Maybe String :: *
+```
+
+* `Maybe String` 的 kind 为 `*`，是一个 concrete type；
+
+
+
+```
+λ> :k Either
+Either :: * -> * -> *
+λ> :k Functor
+Functor :: (* -> *) -> Constraint
+```
