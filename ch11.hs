@@ -1,5 +1,6 @@
 import Data.Char
 import Data.List
+import Control.Applicative
 
 class Functor' f where
   fmap' :: (a -> b) -> f a -> f b
@@ -29,11 +30,42 @@ play3 = do line <- fmap' (intersperse '-' . reverse . map toUpper) getLine
 instance Functor' ((->) r) where
   fmap' = (.)
 
-main :: IO ()
-main = play3
-
 data CMaybe a = CNothing | CJust Int a deriving (Show)
 
 instance Functor CMaybe where
   fmap f CNothing    = CNothing
   fmap f (CJust c x) = CJust (c + 1) (f x)
+
+class (Functor f) => Applicative' f where
+  pure' :: a -> f a
+  (<*!>) :: f (a -> b) -> f a -> f b
+
+instance Applicative' IO where
+  pure' = return
+  x <*!> y = do
+               f <- x
+               a <- y
+               return $ f a
+
+myAction1 :: IO String
+myAction1 =
+  do
+    a <- getLine
+    b <- getLine
+    return $ a ++ b
+
+myAction2 :: IO String
+myAction2 = (++) <$> getLine <*> getLine
+
+instance Applicative' ((->) r) where
+  pure' x = (\_ -> x)
+  f <*!> g = \x -> f x $ g x
+
+instance Applicative' ZipList where
+  pure' x = ZipList (repeat x)
+  ZipList fs <*!> ZipList xs = ZipList $ zipWith (\f x -> f x) fs xs
+
+main :: IO ()
+main =
+  do x <- myAction2
+     putStrLn x

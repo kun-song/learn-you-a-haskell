@@ -284,7 +284,7 @@ f <$> x = fmap f x
 
 ### 其他 `Applicative` 实例
 
-#### list
+#### 1. list
 
 list，更确切的是 `[]` type constructor，也是 applicative：
 
@@ -304,7 +304,100 @@ instance Applicative' [] where
 [4,5,8,6,12,7,5,6,10,7,15,8,6,7,12,8,18,9]
 ```
 
-#### IO
+#### 2. IO
 
+`IO` 也是 `Applicative` 实例：
+
+```Haskell
+instance Applicative' IO where
+  pure' = return
+  x <*!> y = do
+               f <- x
+               a <- y
+               return $ f a
+```
+
+`<*!>` 在 `IO` 实例这，有 sequence 两个 I/O action 的意思。
+
+例如：
+
+```Haskell
+myAction1 :: IO String
+myAction1 =
+  do
+    a <- getLine
+    b <- getLine
+    return $ a ++ b
+```
+
+两个 `getLine` 是先后发生的，可以用 `Applicative` 改写：
+
+```Haskell
+myAction2 :: IO String
+myAction2 = (++) <$> getLine <*> getLine
+```
+
+使用：
+
+```Haskell
+main :: IO ()
+main =
+  do x <- myAction2
+     putStrLn x
+
+λ> main
+Hello
+World
+HelloWorld
+```
+
+#### 3. `(->) r`
+
+前面说过 `r ->` 是 `Functor`，其实它们也是 `Applicative`。
+
+```Haskell
+instance Applicative' ((->) r) where
+  pure' x = (\_ -> x)
+  f <*!> g = \x -> f x $ g x
+```
+
+#### 4. `ZipList`
+
+>`ZipList` 位于 `Control.Applicative`。
+
+整数 `*` 和 `+` 都可以成为 `Monoid`，同样 list 也有多种成为 `Applicative` 的方式。
+
+前面 list 已经以全组合方式成为了 `Applicative`：
+
+```Haskell
+[(* 3), (+ 1)] <*> [1, 2]
+>[3, 6, 2, 3]
+```
+
+list 也可以以 zip 的方式成为 `Applicative`：
+
+```Haskell
+[(* 3), (+ 1)] <*> [1, 2]
+[3, 3]
+```
+
+同时，因为同一个 type + 同一个 typeclass 不能有两个实例，因此用 `ZipList a` 表示：
+
+```Haskell
+instance Applicative' ZipList where
+  pure' x = ZipList (repeat x)
+  ZipList fs <*!> ZipList xs = ZipList $ zipWith (\f x -> f x) fs xs
+```
+
+* `ZipList` 只有一个字段，类型为 list；
+
+因为 `ZipList a` 没有 `Show` 实例，所以用 `getZipList` 获取：
+
+```Haskell
+λ> getZipList $ (+) <$> ZipList [1, 2, 3] <*> ZipList [50, 100, 150]
+[51,102,153]
+```
+
+### `liftA2`
 
 
