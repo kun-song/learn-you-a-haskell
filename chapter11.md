@@ -1,2 +1,223 @@
 # 第十一章 Applicative 函子
 
+OO 中类型通过集成形成 **树状集成层次**，而 Haskell 则灵活的多，完全没有什么继承树，如果觉得某 type 行为类似某 typeclass，只要将该 type 变成该 typeclass 的实例/成员即可。例如 `Int` type 应该可以比较是否相等，则将其变成 `Eq` typeclass 实例即可。
+
+Haskell 中有很多非常抽象、通用的 typeclass，我们定义完自己的 type 后，应该思考该 type 应该具备哪些行为，然后创建特定 typeclass 实例即可。
+
+## `Functor`
+
+`Functor` typeclass 是指任何能够 mapped 的东西，例如 list、`Maybe`、tree 等：
+
+```Haskell
+class Functor' f where
+  fmap' :: (a -> b) -> f a -> f b
+```
+
+>f 是 computational context，例如 `Maybe` 这个计算环境中，计算可能有值，也可能没有值。
+
+一个 type 想要变成 `Functor` typeclass 的实例，则它的 kind 必须是 `* -> *`，例如 `Maybe` 和 `Either a`。
+
+### `IO` 是 `Functor` 的实例
+
+若一个值的类型是 `IO String`，则表明：
+
+* 该值是一个 I/O action，当被执行时，将与现实世界“交互”，并得到一个字符串；
+
+可以用 `<-` 将 `IO String` 执行后得到的值绑定到一个名字。
+
+`IO` type 是 `Functor` 的实例：
+
+```Haskell
+instance Functor' IO where
+  fmap' f action = do a <- action
+                      return $ f a
+```
+
+* 先执行 `action`，然后将 `f` 应用与其结果，最后将应用的结果用 `return` 包裹成一个 `IO a` 值；
+* `do` 块的最后一个 action 的结果将作为整个 `do` 的结果；
+
+```Haskell
+play1 :: IO ()
+play1 = do line <- getLine
+           let line' = reverse line
+           putStrLn $ "You said " ++ line' ++ " backwards!"
+           putStrLn $ "Yes, you really said " ++ line
+
+main :: IO ()
+main = play1
+```
+
+`getLine` 类型为 `IO Stirng`，因此可以利用 `Functor` 改写为：
+
+```Haskell
+play2 :: IO ()
+play2 = do line <- fmap' reverse getLine
+           putStrLn $ "You said " ++ line ++ " backwards!"
+           putStrLn $ "Yes, you really said " ++ line
+
+main :: IO ()
+main = play2
+```
+
+* `fmap' reverse getLine` 将得到一个新的 `IO String`；
+
+另一个例子：
+
+```Haskell
+import Data.Char
+import Data.List
+
+play3 :: IO ()
+play3 = do line <- fmap' (intersperse '-' . reverse . map toUpper) getLine
+           putStrLn line
+
+main :: IO ()
+main = play3
+
+λ> main
+Hello World!
+!-D-L-R-O-W- -O-L-L-E-H
+```
+
+### `(->) a` 也是 `Functor` 的实例
+
+函数类型 `a -> b` 可以重写为 `(->) a b`，类似 `Either`，`(->)` 有两个类型参数，其 kind 为 `* -> * -> *`，固定入参以后，`(->) a` 也是一个 `Functor` 实例。
+
+```Haskell
+instance Functor' ((->) r) where
+  fmap' f g = f . g
+```
+
+`fmap'` 类型为 `(a -> b) -> f a -> f b`，具体到 `(->) r`，`fmap'` 类型为：
+
+```Haskell
+(a -> b) -> (r -> a) -> (r -> b)
+```
+
+恰好是函数组合的功能！所以 `fmap'` 可以直接替换为 `.`：
+
+```Haskell
+instance Functor' ((->) r) where
+  fmap' = (.)
+```
+
+`fmap'` 和 `.` 作用完全相同：
+
+```Haskell
+λ> (+ 10) . (* 3) $ 4
+22
+λ> (+ 10) `fmap'` (* 3) $ 4
+22
+```
+
+### `fmap` 类型深入思考
+
+`fmap'`：
+
+```Haskell
+fmap :: (a -> b) -> f a -> f b
+```
+
+因为 `->` 左结合，所以：
+
+```Haskell
+fmap :: (a -> b) -> (f a -> f b)
+```
+
+因此可以认为 `fmap` 接受一个 `a -> b` 函数，返回一个 `f a -> f b` 函数。
+
+>这被称为 lift a function。
+
+```Haskell
+λ> :t fmap (+ 10)
+fmap (+ 10) :: (Num b, Functor f) => f b -> f b
+λ> :t fmap (replicate 2)
+fmap (replicate 2) :: Functor f => f a -> f [a]
+```
+
+`fmap (+ 10)` 类型为 `(Num b, Functor f) => f a -> f b`，因此可以用于任何可以包裹 `Num` 的 `Functor` 上，例如：
+
+```Haskell
+λ> fmap (+ 10) [1, 2, 3]
+[11,12,13]
+λ> fmap (+ 10) (Just 9)
+Just 19
+```
+
+### `Functor` 法则
+
+一个 type 要变成 `Functor` typeclass 的实例，需要满足 `Functor` 法则。
+
+我们可以自由地用 `instance` 创建 `Functor` 实例，但 Haskell 无法自动保证我们创建的这些实例满足 `Functor` 法则，所以只有用户自行测试保证。
+
+#### 1. id 法则
+
+`fmap id = id`
+
+分析：`fmap id f a => id f a = f a`
+
+If we **map** the `id` function over a functor, the functor that we get back should be the same as the original functor.
+
+将 `id` map 到 `Functor` 上的效果，与将 `id` 应用到 `Functor` 上的效果相同。
+
+从一些 `Functor` 实例的实现上，可以明显看出 id 法则是否成立：
+
+```Haskell
+instance Functor Maybe where
+  fmap f (Just x) = Just (f x)
+  fmap f Nothing  = Nothing
+```
+
+* `f` 若是 `id` 函数，则 `fmap` 明显啥都没做，因此对于 `Maybe` 而言，`fmap id = id` 成立！
+
+#### 2. 结合律
+
+`fmap (f . g) = fmap f . fmap g`
+
+or
+
+`fmap (f . g) F = fmap f (fmap g F)`
+
+Composing two functions and then mapping the resulting function over a functor should be the same as first mapping one function over the functor and then mapping the other one.
+
+对于 `Maybe`：
+
+* `fmap (f . g) Nothing == Nothing`，且 `fmap f (fmap g Nothing) == fmap f Nothing == Nothing`，成立
+* `fmap (f . g) (Just x) = Just ((f . g) x)`，且 `fmap f (fmap g (Just x)) == fmap f (Just (g x)) == Just (f (g x)) == Just ((f . g) x)`，也成立
+
+因此 `Maybe` 满足 `Functor` 结合律。
+
+#### 不满足 `Functor` 法则的 `Functor` 实例不是 `Functor`
+
+可以为任意 kind 为 `* -> *` 的 type constructor 创建 `Functor` 实例（借助 `instance` 关键字），但这还不够，必须还要满足 `Functor` 法则，才能认为该 type 是一个 `Functor`。
+
+例如：
+
+```Haskell
+data CMaybe a = CNothing | CJust Int a deriving (Show)
+```
+
+为 `CMaybe` 创建 `Functor` 实例：
+
+```Haskell
+instance Functor CMaybe where
+  fmap f CNothing    = CNothing
+  fmap f (CJust c x) = CJust (c + 1) (f x)
+```
+
+但实际上，`CMaybe` 既无法满足 `id` 法则，也无法满足结合律，因此虽然 `CMaybe` 是 `Functor` typeclass 的成员（`instance`），但它并不是一个 functor。
+
+#### `fmap` 的作用（重要）
+
+可以将 `Functor` 理解为 **产生** 值的东西，而 `fmap f fa` 则对 `fa` 产生的值施加额外的数据转换（通过 `f` 完成），例如：
+
+* `fmap (+3) [1, 2, 3]`，转换函数为 `(+3)`
+* `fmap (+3) (*2)` 转换函数为 `(+3)`，对 `(*2)` 产生的值进行转换
+
+## Applicative functors
+
+applicative functors 在 Haskell 中用 `Applicative` typeclass 表示，定义在 `Control.Applicative` 模块中。
+
+
+
+
