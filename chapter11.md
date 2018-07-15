@@ -218,6 +218,93 @@ instance Functor CMaybe where
 
 applicative functors 在 Haskell 中用 `Applicative` typeclass 表示，定义在 `Control.Applicative` 模块中。
 
+前面 `fmap` 的参数 kind 都是 `* -> *`，如果被映射的函数 kind 为 `* -> * -> *` 会发生什么呢？
+
+例如 `fmap (*) (Just 10)`，根据 instance 的实现，结果是 `Just (* 10)`，`Maybe` 中包裹的变成函数 `(* 10)`。
+
+现在若有 `Just (* 10)` 和 `Just 11` 两个 `Functor`，如何将 `(* 10)` 应用于 `11` 呢？？？
+
+此时需要 `Applicative` typeclass，其定义如下：
+
+```Haskell
+class (Functor f) => Applicative' f where
+  pure :: a -> f a
+  (<*>) :: f (a -> b) -> f a -> f b
+```
+
+* 一个 type 想要成为 `Applicative`，首先必须是 `Functor`；
+* `<*>` 类型与 `fmap` 有点类似：`fmap :: (a -> b) -> f a -> f b`；
+
+为 `Maybe` 实现 `Applicative` 实例：
+
+```Haskell
+instance Applicative' Maybe where
+  pure = Just
+  (Just f) <*> (Just x) = Just $ f x
+  _ <*> _ = Nothing
+```
+
+因为 `Functor f => Applicative f`，所以 `<*>` 可以借助 `fmap` 实现：
+
+```Haskell
+instance Applicative' Maybe where
+  pure = Just
+  (Just f) <*> fa = fmap f fa
+  Nothing <*> _   = Nothing
+```
+
+使用：
+
+```Haskell
+λ> Just (* 6) <*!> Just 111
+Just 666
+λ> pure' (* 6) <*!> Just 111
+Just 666
+λ> pure' (*) <*!> Just 100 <*!> Just 50
+Just 5000
+```
+
+* `pure (* 6)` 与 `Just (* 6)` 完全相同；
+* `<*!>` 是左结合的；
+
+`pure f <$> Just 10` 实际与 `fmap f (Just 10)` 等价，实际上，`<$>` 仅仅是 `fmap` 的中缀形式：
+
+```Haskell
+(<$>) :: (Funtor f) => (a -> b) -> f a -> f b
+f <$> x = fmap f x
+```
+
+* 注意：类型中的变量与参数、函数中的变量完全隔离，因此两个 `f` 完全独立，不是一回事；
+
+不要混淆 `<$>`（`fmap`） 和 `<*>`：
+
+```Haskell
+(++) <$> Just "Hello" <*> "World"
+```
+
+### 其他 `Applicative` 实例
+
+#### list
+
+list，更确切的是 `[]` type constructor，也是 applicative：
+
+```Haskell
+instance Applicative' [] where
+  pure' x = [x]
+  fs <*!> xs = [f x | x <- xs, f <- fs]
+```
+
+`<*>` 将 `fs` 中的每个函数应用于 `xs` 中的每个元素上：
+
+```Haskell
+λ> [(+ 1), (+ 2)] <*!> [1, 2, 3, 4]
+[2,3,3,4,4,5,5,6]
+
+λ> [(*), (+)] <*!> [1, 2, 3] <*!> [4, 5, 6]
+[4,5,8,6,12,7,5,6,10,7,15,8,6,7,12,8,18,9]
+```
+
+#### IO
 
 
 
