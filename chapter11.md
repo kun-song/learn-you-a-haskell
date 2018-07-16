@@ -400,4 +400,74 @@ instance Applicative' ZipList where
 
 ### `liftA2`
 
+`Control.Applicative` 定义了 `liftA2` 函数：
+
+```Haskell
+liftA2' :: (Applicative f) => (a -> b -> c) -> f a -> f b -> f c
+liftA2' f fa fb = f <$> fa <*> fb
+```
+
+从两个方面理解：
+
+1. `liftA2` 表明 `Applicative` 比 `Functor` 更加强大，因为借助 `Applicative` 可以多次应用一个函数；
+2. `liftA2` 可以理解为将 `a -> b -> c` 函数转换为 `f a -> f b -> f c`；
+
+我们可以把两个 `Applicative` 合成一个 `Applicative`，该 `Applicative` 中包裹前面两个的值。
+
+例如，将 `Just 3` 和 `Just 4` 合成一个：
+
+```Haskell
+   (\x -> [x]) <$> Just 4
+=> Just [4]
+
+   (:) <$> Just 3 <*> Just [4]
+=> Just [3,4]
+
+   liftA2' (:) (Just 3) (Just [4])
+=> Just [3,4]
+
+   liftA2' (:) (Just 2) (Just [3, 4])
+=> Just [2,3,4]
+```
+
+实际上，可以把 **任意数量** 的 `Applicative` 合成一个 `Applicative`：
+
+```Haskell
+sequenceA' :: (Applicative f) => [f a] -> f [a]
+sequenceA' []       = pure []
+sequenceA' (f : fs) = liftA2' (:) f (sequenceA' fs)
+
+   sequenceA [Just 1, Just 2, Just 3]
+=> Just [1,2,3]
+```
+
+另外，几乎所有涉及 list 遍历的函数都可以用 `fold` 实现：
+
+```Haskell
+sequenceA'' :: (Applicative f) => [f a] -> f [a]
+sequenceA'' = foldr (liftA2' (:)) (pure [])
+```
+
+一些 `sequenceA` 的例子：
+
+```Haskell
+   sequenceA'' [Just 1, Just 2, Just 3]
+=> Just [1,2,3]
+   sequenceA'' [Just 1, Just 2, Nothing]
+=> Nothing
+   sequenceA'' [[1, 2, 3], [4, 5]]
+=> [[1,4],[1,5],[2,4],[2,5],[3,4],[3,5]]
+```
+
+当有一个输入参数，和一系列函数，想要判断该参数是否全部满足这些函数时，`sequenceA` 很有用：
+
+```Haskell
+   sequenceA' [(> 10), (< 20), odd] 13
+=> [True,True,True]
+   and $ sequenceA' [(> 10), (< 20), odd] 13
+=> True
+```
+
+* `sequenceA` 将 `(Num a) => [a -> Bool]` 转换为 `(Num a) => a -> [Bool]`；
+
 
