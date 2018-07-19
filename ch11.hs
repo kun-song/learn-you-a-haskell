@@ -65,6 +65,20 @@ instance Applicative' ZipList where
   pure' x = ZipList (repeat x)
   ZipList fs <*!> ZipList xs = ZipList $ zipWith (\f x -> f x) fs xs
 
+liftA2' :: (Applicative f) => (a -> b -> c) -> f a -> f b -> f c
+liftA2' f fa fb = f <$> fa <*> fb
+
+sequenceA' :: (Applicative f) => [f a] -> f [a]
+sequenceA' []       = pure []
+sequenceA' (fa : fas) = (:) <$> fa <*> sequenceA' fas
+
+sequenceA'' :: (Applicative f) => [f a] -> f [a]
+sequenceA'' []         = pure []
+sequenceA'' (fa : fas) = liftA2 (:) fa (sequenceA'' fas)
+
+sequenceA''' :: (Applicative f) => [f a] -> f [a]
+sequenceA''' = foldr (liftA2 (:)) (pure [])
+
 main :: IO ()
 main =
   do x <- myAction2
