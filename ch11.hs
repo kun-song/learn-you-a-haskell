@@ -79,6 +79,25 @@ sequenceA'' (fa : fas) = liftA2 (:) fa (sequenceA'' fas)
 sequenceA''' :: (Applicative f) => [f a] -> f [a]
 sequenceA''' = foldr (liftA2 (:)) (pure [])
 
+newtype ZipList' a = ZipList' { getZipList' :: [a] }
+
+newtype CharList = CharList { getCharList :: [Char] }
+
+newtype Pair b a = Pair { getPair :: (a, b) } deriving (Show)
+
+instance Functor (Pair c) where
+  fmap f (Pair (a, b)) = Pair (f a, b)
+
+data CoolBool = CoolBool { getCoolBool :: Bool }
+
+helloMe :: CoolBool -> String
+helloMe (CoolBool _) = "hello"
+
+newtype CoolBool' = CoolBool' { getCoolBool' :: Bool }
+
+helloMe' :: CoolBool' -> String
+helloMe' (CoolBool' _) = "hello"
+
 main :: IO ()
 main =
   do x <- myAction2

@@ -587,8 +587,120 @@ CharList :: [Char] -> CharList
 getCharList :: CharList -> [Char]
 ```
 
+### 为 `newtype` 创建的类型实现 typeclass instance
 
+为 `Maybe` 成为 `Functor` typeclass 的实例很简单：
 
+```Haskell
+class Functor f where
+  fmap :: (a -> b) -> f a -> f b
 
+instance Functor Maybe where
+  fmap _ Nothing  = Nothing
+  fmap f (Just x) = Just $ f x
+```
 
+因为 `Maybe` 恰好满足 `Functor` 对 type constructor 的要求：kind 为 `* -> *`。
 
+如果要让 `tuple` 成为 `Functor` 实例，可以仅将 `f` 应用于第一个参数，保持第二个参数不变，但这却难以实现，因为我们只能部分应用第一个参数。
+
+可以借助 `newtype` 实现：
+
+```Haskell
+newtype Pair b a = Pair { getPair :: (a, b) } deriving (Show)
+
+instance Functor (Pair c) where
+  fmap f (Pair (a, b)) = Pair (f a, b)
+
+λ> (+ 10) <$> Pair (1, 10)
+Pair {getPair = (11,10)}
+```
+
+* `fmap :: (a -> b) -> Pair c a -> Pair c b`
+
+### `newtype` 是惰性的
+
+Haskell 本身是 lazy 的，即实际计算仅进行到满足需求即可，例如：
+
+```Haskell
+λ> head [1, 2, undefined]
+1
+λ> head [undefined, 1, 2]
+*** Exception: Prelude.undefined
+CallStack (from HasCallStack):
+  error, called at libraries/base/GHC/Err.hs:79:14 in base:GHC.Err
+  undefined, called at <interactive>:76:7 in interactive:Ghci3
+```
+
+* `undefined` 计算时将抛出异常；
+
+现有如下类型：
+
+```Haskell
+data CoolBool = CoolBool { getCoolBool :: Bool }
+```
+
+对 `CoolBool` 进行模式匹配，无论是 `True` 还是 `False`，都返回 `hello`：
+
+```Haskell
+helloMe :: CoolBool -> String
+helloMe (CoolBool _) = "hello"
+```
+
+`helloMe undefined` 将抛出异常：
+
+```Haskell
+λ> helloMe undefined
+"*** Exception: Prelude.undefined
+CallStack (from HasCallStack):
+  error, called at libraries/base/GHC/Err.hs:79:14 in base:GHC.Err
+  undefined, called at <interactive>:99:9 in interactive:Ghci2
+```
+
+因为使用 `data` 定义的类型可以有：
+
+* 多个 value constructors
+* 每个 value constructor 可以有多个字段
+
+虽然 `CoolBool` 只有一个 value constructor，且它也只有一个字段，但 Haskell 无法知道这些信息，它只能通过计算 `CoolBool` 类型的值，才能确定该值是哪个 value constructor 创建的。
+
+然后 `helloMe` 计算参数值 `undefined` 时，抛出异常。
+
+改为用 `newtype` 定义 `CoolBool`：
+
+```Haskell
+newtype CoolBool' = CoolBool' { getCoolBool' :: Bool }
+
+helloMe' :: CoolBool' -> String
+helloMe' (CoolBool' _) = "hello"
+
+λ> helloMe' undefined
+"hello"
+```
+
+* `newtype` 定义的类型与 `data` 一样，也可以用于模式匹配。
+
+`newtype` 定义的类型，只能：
+
+* 一个 value constructor
+* 该 value constructor 只能有恰好一个字段
+
+因此 Haskell 不需要计算 `CoolBool'` 类型的值，即可知道该值是由 `CoolBool'` value constructor 创建的，因此肯定能匹配 `(CoolBool' _)` 模式，所以不会计算 `undefined`。
+
+### `type` vs `newtype` vs `data`
+
+`type` 用于创建类型别名，目的使代码更容易阅读：
+
+```Haskell
+type PhoneBook = [(String, String)]
+```
+
+`newtype` 从一个 **老类型** 创建出一个 **新类型**，一般目的是将新类型变为某 typeclass 的实例：
+
+```Haskell
+newtype CharList = CharList { getCharList :: [Char] }
+```
+
+* `CharList` 与 `[Char]` 是两个完全不同的类型，无法使用 `++` 连接两者，实际上 `CharList` 根本没有定义 `++` 函数；
+
+`data` 用于创建 ADTs，最常用。
