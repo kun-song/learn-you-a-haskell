@@ -430,6 +430,8 @@ liftA2' f fa fb = f <$> fa <*> fb
 => Just [2,3,4]
 ```
 
+### `sequenceA`
+
 实际上，可以把 **任意数量** 的 `Applicative` 合成一个 `Applicative`：
 
 ```Haskell
@@ -471,5 +473,122 @@ sequenceA'' = foldr (liftA2' (:)) (pure [])
 ```
 
 * `sequenceA` 将 `(Num a) => [a -> Bool]` 转换为 `(Num a) => a -> [Bool]`；
+
+list 也是 `Applicative`，当 `sequenceA` 用于 list 时比较有趣：
+
+```Haskell
+   sequenceA [[1, 2, 3], [4, 5], [111]]
+=> [[1,4,111],[1,5,111],[2,4,111],[2,5,111],[3,4,111],[3,5,111]]
+```
+
+结果是所有元素的全组合，回想下 `sequenceA` 的实现：
+
+```Haskell
+sequenceA' :: (Applicative f) => [f a] -> f [a]
+sequenceA' []       = pure []
+sequenceA' (f : fs) = (:) <$> f <*> (sequenceA' fs)
+```
+
+推导过程如下：
+
+* We start off with sequenceA `[[1,2],[3,4]]`
+* That evaluates to `(:) <$> [1,2] <*> sequenceA [[3,4]]`
+* Evaluating the inner sequenceA further, we get `(:) <$> [1,2] <*> ((:) <$> [3,4] <*> sequenceA [])`
+* We've reached the edge condition, so this is now `(:) <$> [1,2] <*> ((:) <$> [3,4] <*> [[]])`
+* Now, we evaluate the `(:) <$> [3,4] <*> [[]]` part, which will use `:` with every possible value in the left list (possible values are 3 and 4) with every possible value on the right list (only possible value is `[]`), which results in `[3:[], 4:[]]`, which is `[[3],[4]]`. So now we have `(:) <$> [1,2] <*> [[3],[4]]`
+* Now, `:` is used with every possible value from the left list (1 and 2) with every possible value in the right list ([3] and [4]), which results in `[1:[3], 1:[4], 2:[3], 2:[4]]`, which is `[[1,3],[1,4],[2,3],[2,4]`
+
+>关键是理解 `<$>` 和 `<*>` 在 list applicative 中的实现细节。
+
+`sequenceA` 用于 `IO` 时：
+
+```Hasekll
+ghci> sequenceA [getLine, getLine, getLine]  
+heyh  
+ho  
+woo  
+["heyh","ho","woo"]  
+```
+
+## `newtype` 关键字
+
+目前关于类型的关键字有：
+
+* `data`：创建 ADTs
+* `type`：创建类型别名
+
+`newtype` 用于从已存在的 type 中创建新的 type。
+
+前面说过，list 可以以多种方式成为 `Applicative`，例如全组合：
+
+```Haskell
+   [(+ 1), (* 2)] <*> [1, 2, 3]
+=> [2,3,4,2,4,6]
+```
+
+还可以用 zip 风格，但 list 已经成为了 `Applicative` 实例，且 Haskell 只允许存在一个实例，所以我们用 `ZipList` 实现 zip 风格的 list `Applicative`：
+
+```Haskell
+ghci> getZipList $ ZipList [(+ 1),(* 100),(* 5)] <*> ZipList [1, 2, 3]
+[2,200,15]
+```
+
+* `ZipList` 只有一个 list 字段，可以认为是 list 的包装类，`ZipList` 本身被实现为 `Applicative` 实例，因此当需要用 zip 方式使用 list applicative 时，将 list 包装在 `ZipList` 中即可，操作完成后用 `getZipList` 获取里面包装的 list 值；
+
+那 `ZipList` 是怎么实现的呢，首先当然可以用 `data` 声明：
+
+```Haskell
+data ZipList a = ZipList [a]
+```
+
+也可以用 record 语法声明，从而获取 `getZipList` 函数：
+
+```Haskell
+data ZipList' a = ZipList' { getZipList' :: [a] }
+```
+
+The `newtype` keyword in Haskell is made exactly for these cases when we want to just take one type and wrap it in something to present it as another type，`ZipList` 实际上是用 `newtype` 实现的：
+
+```Haskell
+newtype ZipList' a = ZipList' { getZipList' :: [a] }
+```
+
+与 record 语法相比，仅仅将 `data` 替换成 `newtype`。
+
+`newtype` 要比 `data` 运行效率要高一些，因为使用 `data` 有 wrapping/unwrapping 的开销，而 `newtype` 则让编译器知道，新的类型与老的类型仅仅是类型不同，底层表示是一模一样的，因此省去了 wrapping/unwrapping 的开销。
+
+`newtype` 不够灵活：
+
+* 只能有一个 value constructor
+* 该 value constructor 只能有恰好一个字段
+
+`newtype` 中也可以使用 `deriving` 自动生成内置 typeclass（`Eq`, `Ord`, `Enum`, `Bounded`, `Show` and `Read`）的实例，不过前提是被包裹的 type 早已经实现对应的 typeclass 实例：
+
+```Haskell
+newtype CharList = CharList { getCharList :: [Char] } deriving (Show, Eq)
+
+   CharList ['a', 'b']
+=> CharList {getCharList = "ab"}
+   CharList ['a', 'b'] == CharList ['b', 'c']
+=> False
+   CharList "Hello"
+=> CharList {getCharList = "Hello"}
+```
+
+其中 value constructor `CharList` 也是普通函数，类型为：
+
+```Haskell
+CharList :: [Char] -> CharList
+```
+
+而 `getCharList` 类型为：
+
+```Haskell
+getCharList :: CharList -> [Char]
+```
+
+
+
+
 
 
