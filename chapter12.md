@@ -183,3 +183,93 @@ All' {getAll' = False}
 
 ## `Ordering`
 
+`Ordering` 是 `compare` 函数的结果类型，有 3 种值：
+
+* `LT`
+* `EQ`
+* `GT`
+
+```Haskell
+   10 `compare` 9
+=> GT
+   10 `compare` 90
+=> LT
+   10 `compare` 10
+=> EQ
+```
+
+`Ordering` 也是 monoid，虽然不那么直观：
+
+```Haskell
+instance Monoid' Ordering where
+  mempty' = EQ
+  GT `mappend'` _ = GT
+  LT `mappend'` _ = LT
+  EQ `mappend'` y = y
+```
+
+* `mappend` 背后的逻辑有点类似字符串比较，例如 `ab` 与 `ac`，先比较第一个字符，如果大小有区别，则将其作为整个字符串比较的结果，如果相等，则比较第二个字符...
+
+```Haskell
+   LT `mappend` GT
+=> LT
+   GT `mappend` LT
+=> GT
+   EQ `mappend` LT
+=> LT
+   mempty `mappend` LT
+=> LT
+```
+
+让 `Ordering` 成为 `Monoid` 实例有什么用处呢，看一个例子，比较两个字符串，规则如下：
+
+* 先按长度比较，若长度不同，返回 `LT` 或 `GT`，若长度相同（`EQ`）
+* 则按字母序比较
+
+如果没有 `Ordering` monoid，实现为：
+
+```Haskell
+compareLength :: String -> String -> Ordering
+compareLength x y = let a = length x `compare` length y
+                        b = x `compare` y
+                    in
+                        if a == EQ then b else a
+
+   length "Hello" `compare` length "Hellox"
+=> LT
+   compareLength "Hello" "HellO"
+=> GT
+```
+
+但借助 `Ordering` 是 monoid 这点，实现可以简化为：
+
+```Haskell
+compareLength' :: String -> String -> Ordering
+compareLength' x y = (length x `compare` length y) `mappend'` (x `compare` y)
+
+   compareLength' "Hello" "Hellox"
+=> LT
+   compareLength' "Hello" "HellO"
+=> GT
+```
+
+借助 `Monoid`，我们可以把多个判断标准，按照优先级串联起来：
+
+```Haskell
+import Data.Monoid  
+  
+lengthCompare :: String -> String -> Ordering  
+lengthCompare x y = (length x `compare` length y) `mappend`  
+                    (vowels x `compare` vowels y) `mappend`  
+                    (x `compare` y)  
+    where vowels = length . filter (`elem` "aeiou")
+```
+
+## `Maybe`
+
+`Maybe` 也有多种方式成为 `Monoid` 实例。
+
+
+
+
+
