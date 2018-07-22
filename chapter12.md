@@ -269,7 +269,168 @@ lengthCompare x y = (length x `compare` length y) `mappend`
 
 `Maybe` 也有多种方式成为 `Monoid` 实例。
 
+### 第一种
 
+第一种方式是，如果 `a` 是 `Monoid`，则 `Maybe a` 也是 `Monoid`，即 `Maybe a` 的 `mappend` 代理给 `a` 的 `mappend` 函数：
 
+```Haskell
+instance Monoid' a => Monoid' (Maybe a) where
+  mempty' = Nothing
+  Nothing `mappend'` m = m
+  m `mappend'` Nothing = m
+  Just x `mappend'` Just y = Just $ x `mappend'` y
+```
 
+* `Maybe a` 成为 `Monoid` 实例的前提：`a` 首先必须是 `Monoid` 实例；
 
+使用：
+
+```Haskell
+λ> Just "Hello" `mappend'` Nothing
+Just "Hello"
+λ> Nothing `mappend'` Just "World"
+Just "World"
+λ> Just [1, 2, 3] `mappend'` Just [4, 5]
+Just [1,2,3,4,5]
+```
+
+`Maybe a` 以这种方式成为 `Monoid` 实例，可以让我们组合结果为 `Maybe` 的函数，这样组合时无法考虑该函数返回的是 `Nothing` 还是 `Just`，因为该逻辑已经在 `mappend` 中实现了。
+
+### 第二种
+
+#### `First`
+
+`a` 是 `Monoid` 仅仅是假设而已，`a` 当然可以不是 `Monoid`，回忆一下，其实仅仅当两个参数都是 `Just` 时才用到 `a` 的 `mappend` 函数，所以如果 `a` 不是 `Monoid`，只需要想出一种合理的方式处理两个 `Maybe` 的内容即可。
+
+其中一种合理方式是仅取第一个 `Maybe` 的内容，抛弃第二个 `Monoid` 的内容：
+
+```Haskell
+instance Monoid (First a) where
+  mempty = First Nothing
+  First (Just x) `mappend` _ = First $ Just x
+  First Nothing `mappend` f  = f
+```
+
+使用：
+
+```Haskell
+λ> First (Just "Hello") `mappend` First Nothing
+First {getFirst = Just "Hello"}
+λ> First Nothing `mappend` First (Just "World")
+First {getFirst = Just "World"}
+λ> First (Just "Hello") `mappend` First (Just "World")
+First {getFirst = Just "Hello"}
+λ> First (Just [1, 2, 3]) `mappend` First (Just [4, 5])
+First {getFirst = Just [1,2,3]}
+```
+
+`First` 使用场景：当有很多 `Maybe`，然后想知道其中是否存在 `Just` 时，可以用 `mconcat`：
+
+```Haskell
+λ> getFirst . mconcat . map First $ [Nothing, Nothing, Just 1, Just 2, Just 3]
+Just 1
+```
+
+#### `Last`
+
+能选第一个，当然也能选第二个：
+
+```Haskell
+newtype Last a = Last { getLast :: Maybe a } deriving Show
+
+instance Monoid (Last a) where
+  mempty = Last Nothing
+  _ `mappend` Last (Just x) = Last (Just x)
+  f `mappend` Last Nothing  = f
+```
+
+使用：
+
+```Haskell
+λ> mconcat . map Last $ [Nothing, Nothing, Just 1, Just 2, Just 3]
+Last {getLast = Just 3}
+λ> Last (Just "Hello") `mappend` Last (Just "World")
+Last {getLast = Just "World"}
+```
+
+## `Monoid` + `Folable`
+
+`fold` 函数不仅限于 list，因此可以将能够 fold 的行为定义为 `Foldable` typeclass，`Foldable` 定义于  `Data.Foldable`，因为 `Foldable` 很多函数与 `Prelude` 冲突，所以需要：
+
+```Haskell
+import qualified Data.Foldable as F
+```
+
+`Foldable` typeclass 定义了 `foldr`、`foldl`、`foldr1`、`foldl1`，不仅 list 可被折叠，`Maybe` 也可以：
+
+```Haskell
+λ> F.foldl (+) 6 (Just 10)
+16
+λ> F.foldr (||) False (Just True)
+True
+```
+
+前面定义过树：
+
+```Haskell
+data Tree a = Empty | Node a (Tree a) (Tree a) deriving Show
+```
+
+前面已经将 `Tree` 变成了 `Functor` typeclass 实例，现在将其变成 `Foldable` 实例。
+
+只需要 `foldr` 或 `foldMap` 即可：
+
+```Haskell
+λ> :t F.foldMap
+F.foldMap :: (Monoid m, Foldable t) => (a -> m) -> t a -> m
+```
+
+* `(a -> m)` 将普通值转换为 `Monoid`，然后再指定要转换的树 `t a`，`foldMap` 即可借助 `mappend` 将整棵树转换为一个 `Monoid` 值；
+
+```Haskell
+instance F.Foldable Tree where
+  foldMap f Empty = mempty
+  foldMap f (Node x l r) = F.foldMap f l `mappend` f x `mappend` F.foldMap f r
+```
+
+* 实现 `foldMap` 后，即可自动获取 `foldr` 和 `foldl` 等其他 `Foldable` 定义的函数。
+
+有树如下：
+
+```Haskell
+λ> let tree = Node 5 (Node 3 (Node 1 Empty Empty) (Node 6 Empty Empty)) (Node 9 (Node 8 Empty Empty) (Node 10 Empty Empty))
+```
+
+借助 `Foldbable`，可以很容易折叠它：
+
+```Haskell
+λ> F.foldl (*) 1 tree
+64800
+λ> F.foldl (+) 0 tree
+42
+```
+
+如果想知道 `tree` 中是否存在 3：
+
+```Haskell
+λ> F.foldMap (\x -> Any' $ x == 3) tree
+Any' {getAny' = True}
+```
+
+* 将 x 转换为 `Any` monoid；
+
+是否有大于 100 的节点：
+
+```Haskell
+λ> getAny' $ F.foldMap (\x -> Any' $ x > 100) tree
+False
+```
+
+将树转换为 list：
+
+```Haskell
+λ> F.foldMap (\x -> [x]) tree
+[1,3,6,5,8,9,10]
+```
+
+* `(\x -> [x])` 将每个结点转换为 singleton list，然后用 `mappend` 将所有 singleton list 组合为一个 list。
