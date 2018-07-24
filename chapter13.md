@@ -319,3 +319,77 @@ routine =
 Just (3,3)
 ```
 
+可以很容易获得 `banana` 和 `>>` 的效果：
+
+```Haskell
+routine :: Maybe Pole
+routine =
+  do
+    start <- return (0, 0)
+    first <- landLeft 2 start
+    Nothing
+    second <- landRight 2 first
+    landRight 1 second
+```
+
+* 在 `do` 表达式中添加一行没有 `<-` 的 monadic value，意思是虽然还是要顺序执行这个 monadic value，但我们忽略它的结果，所以 `Nothing` 等价于 `_ <- Nothing`；
+* 虽然忽略了 `Nothing` 的结果，但序列中还是出现了 `Nothing`，所以 `do` 表达式的结果变成 `Nothing`；
+
+>何时用 `do`，何时用 `>>=` 取决于用户，不过上面的例子其实更适合用 `>>=`，因为每次 land 都直接依赖前一次的执行结果，使用 `>>=` 更加清晰；而 `do` 却不需要严格顺序依赖。
+
+### `do` 模式匹配
+
+`do` 中可以使用模式匹配：
+
+```Haskell
+justHead :: Maybe String -> Maybe Char
+justHead s =
+  do
+    (x : _) <- s
+    return x
+```
+
+使用：
+
+```Haskell
+   justHead $ Just $ "Hello"
+=> Just 'H'
+   justHead Nothing
+=> Nothing
+```
+
+如果模式匹配失败怎么办呢？在函数中失败，在 `let` 中失败，在 `do` 中失败，Haskell 的处理机制不同。
+
+当在 `do` 表达式中匹配失败时，将调用 `Monad` 的 `fail` 函数（注意 `do` 表达式是 `Monad` 的 `>>=` 函数的语法糖），`fail` 函数将根据 `Monad` 实例的不同产生一个 computation context 下的失败，以防止整个程序崩溃退出。
+
+但其默认实现为：
+
+```Haskell
+fail :: Monad m => String -> m a
+fail msg = error msg
+```
+
+从 `fail` 默认实现可看出，当调用 `fail` 时，会调用 `error`，进而导致程序崩溃。
+
+前面不是说 `do` 表达式匹配失败时，会调用 `fail` 以避免崩溃吗？？？
+
+当然，这是有限制的，只有当 `Monad` 的 context 有 fail 这种意义时，对应的 `Monad` 实例将实现自己的 `fail`，从而避免崩溃，例如对于 `Maybe`：
+
+```Haskell
+fail :: Monad m => String -> m a
+fail _ = Nothing
+```
+
+因此 `Maybe` 在 `do` 中匹配失败时，不会崩溃退出，而是产生一个 `Nothing`，这是合理的：
+
+```Haskell
+wopwop :: Maybe Char  
+wopwop = do  
+    (x:xs) <- Just ""  
+    return x  
+```
+
+>The failed pattern matching has caused a failure within the context of our monad instead of causing a program-wide failure, which is pretty neat.
+
+## 列表 `Monad`
+
