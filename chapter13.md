@@ -80,7 +80,7 @@ class Monad' m where
   fail' msg = error msg
 ```
 
-前面说过 `Monad` 是加强版的 `Applicative`，但此时没有添加类似 `class Applicative m => Monad m where` 的类型约束，这是历史问题，按理说需要添加的，但即使没添加，我们也认为所有 `Monad` 首先必须是 `Applicative`。
+前面说过 `Monad` 是加强版的 `Applicative`，但 `Monad` typeclass 却没有添加类似 `class Applicative m => Monad m where` 的类型约束，这是历史问题，按理说需要添加的，但即使没添加，我们也认为所有 `Monad` 首先必须是 `Applicative`。
 
 `return` 函数作用与 `Applicative` 的 `pure` 完全相同，仅仅名字不同而已。
 
@@ -111,7 +111,7 @@ instance Monad' Maybe where
 => Nothing
 ```
 
-### Walk the line
+## Walk the line
 
 平衡杆：
 
@@ -214,5 +214,108 @@ landLeft 1 (landLeft 1 (landRight 3 (0, 0)))
 ```Haskell
    return (0, 0) >>= landLeft 3 >>= landRight 2 >>= landLeft 1 >>= landRight 1
 => Just (4,3)
+```
+
+可以设计一个函数，无论当前 `Pole` 是否满足平衡条件，都返回 `Nothing`（即不平衡）：
+
+```Haskell
+banana :: Pole -> Maybe Pole
+banana _ = Nothing
+```
+
+加入 `banana` 将导致立即失败：
+
+```Haskell
+λ> return (0, 0) >>= landLeft 1 >>= banana >>= landRight 1
+Nothing
+```
+
+* `banana` 无论接受 `Just x` 还是 `Nothing`，结果都是 `Nothing`；
+
+实际上 `banana` 完全没有必要自定义，可以直接使用 `Monad` 的 `>>` 函数：
+
+```Haskell
+(>>) :: Monad m => m a -> m b -> m b
+x >> y = x >>= \_ -> y
+```
+
+`>>` 虽然忽略了第一个参数，但依然考虑了第一个参数可能成功，也可能失败的场景，即 computation context 被保留：
+
+```Haskell
+λ> Nothing >> Just 3
+Nothing
+λ> Just 3 >> Just 4
+Just 4
+λ> Just 3 >> Nothing
+Nothing
+```
+
+* `Nothing >> Just 3` 考虑第一个参数实际计算失败，所以结果为 `Nothing` 是合理的；
+
+用 `>>` 替代 `banana`：
+
+```Haskell
+λ> return (0, 1) >>= landLeft 1 >> Nothing >>= landRight 1
+Nothing
+```
+
+如果不把 `Maybe` 视为 `Monad`，则：
+
+```Haskell
+routine :: Maybe Pole  
+routine = case landLeft 1 (0,0) of  
+    Nothing -> Nothing  
+    Just pole1 -> case landRight 4 pole1 of   
+        Nothing -> Nothing  
+        Just pole2 -> case landLeft 2 pole2 of  
+            Nothing -> Nothing  
+            Just pole3 -> landLeft 1 pole3  
+```
+
+非常繁琐！
+
+`Monad` 的 `>>=` 方法实际封装了对 `Just x` 和 `Nothing` 的判断，以及分别处理。
+
+## `do` 记号
+
+`Monad` 在 Haskell 中非常有用，因此有专门用于 `Monad` 的 `do` 记号。
+
+嵌套的 `>>=`：
+
+```Haskell
+λ> Just 11 >>= (\x -> Just "!" >>= (\y -> Just $ show x ++ y))
+Just "11!"
+```
+
+借助 `do` 可以将嵌套的 `>>=` 改写为：
+
+```Haskell
+foo :: Maybe String
+foo = do
+        x <- Just 11
+        y <- Just "!"
+        Just $ show x ++ y
+```
+
+* `do` 仅仅是 `>>=` 的语法糖；
+* `do` 中的任意一个 monadic value 为 `Nothing`，则整个 `do` 表达式结果为 `Nothing`；
+
+走钢丝也可以用 `do` 表达：
+
+```Haskell
+routine :: Maybe Pole
+routine =
+  do
+    start <- return (0, 0)
+    first <- landLeft 2 start
+    second <- landRight 3 first
+    landLeft 1 second
+```
+
+说实话，这里还不如用 `>>=`：
+
+```Haskell
+λ> return (0, 0) >>= landLeft 2 >>= landRight 3 >>= landLeft 1
+Just (3,3)
 ```
 
