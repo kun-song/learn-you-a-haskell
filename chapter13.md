@@ -393,3 +393,24 @@ wopwop = do
 
 ## 列表 `Monad`
 
+`Maybe` 类型的值，可以视为带有 failure context 的值，通过将其变成 `Monad` 实例，我们把 failure handling 集成到了 `>>=` 函数中。
+
+而通过把 list 变成 `Monad` 实例，可以把 non-determinism 集成到 `>>=` 函数中。
+
+list 可以视为 non-deterministic values：
+
+* 5 是确定性的值，只有一种可能
+* `[1, 2, 3]` contains several results, so we can view it as one value that is actually many values at the same time
+
+在 list `Applicative` 中已经领教过 list 的这个特点：
+
+```Haskell
+   (+) <$> [1, 2, 3] <*> [4, 5]
+=> [5,6,6,7,7,8]
+```
+
+list 的 context of non-determinism 可以很容易变成 `Monad`：
+
+```Haskell
+
+```
