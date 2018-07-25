@@ -412,5 +412,105 @@ list 可以视为 non-deterministic values：
 list 的 context of non-determinism 可以很容易变成 `Monad`：
 
 ```Haskell
-
+instance Monad' [] where
+  return' x = [x]
+  xs >>=! f = concat $ map f xs
+  fail' _   = []
 ```
+
+* `>>=` 就是 Scala 的 `flatMap`，`concat` 就是 Scala 的 `flatten`；
+
+使用：
+
+```Haskell
+λ> return' 1 :: [Int]
+[1]
+λ> [1, 2, 3] >>=! \x -> [x, -x]
+[1,-1,2,-2,3,-3]
+```
+
+non-determinism 某种程度上也支持 failure，空列表 `[]` 几乎与 `Nothing` 作用相同，因为 `[]` 也表示没有结果，因此 `fail` 函数被定义为 `[]`，而非 `error msg`：
+
+```Haskell
+λ> [] >>= \x -> [1, 2, 3]
+[]
+λ> [1, 2, 3] >>= \x -> []
+[]
+```
+
+* 第一个例子，`map f xs` 结果就是空了；
+* 第二个例子，`map f xs` 为 `[[], [], []]`，`concat` 之后为 `[]`；
+
+### 嵌套 `>>=` 与 list comprehension
+
+```Haskell
+λ> [1, 2, 3] >>= \x -> [4, 5] >>= \y -> return (x + y)
+[5,6,6,7,7,8]
+```
+
+改写为 `do` 表达式：
+
+```Haskell
+sumOfLists :: [Int]
+sumOfLists =
+  do
+    x <- [1, 2, 3]
+    y <- [4, 5]
+    return $ x + y
+
+λ> sumOfLists
+[5,6,6,7,7,8]
+```
+
+* `do` 表达式更容易看出 `x` 取 `[1, 2, 3]` 中的所有值，`y` 取 `[4, 5]` 中的所有值，最后 `x + y` 是全组合；
+
+`do` 表达式与 list 推导很像：
+
+```Haskell
+λ> [x + y | x <- [1, 2, 3], y <- [4, 5]]
+[5,6,6,7,7,8
+```
+
+>list 推导和 `do` 表达式一样，都是嵌套 `>>=` 的语法糖！
+
+### 过滤
+
+list 推导可以有过滤条件：
+
+```Haskell
+λ> [x | x <- [1 .. 50], '7' `elem` (show x)]
+[7,17,27,37,47]
+```
+
+过滤在 `Monad` 中怎么体现呢？这就需要 `MonadPlus` typeclass 的 `guard` 函数了。
+
+`MonadPlus` typeclass 是同时也是 `Monoid` 的 `Monad`：
+
+```Haskell
+class Monad m => MonadPlus' m where
+  mzero' :: m a
+  mplus' :: m a -> m a -> m a
+```
+
+* `mzero` 与 `mplus` 分别对应 `Monoid` typeclass 的 `mempty` 与 `mappend`；
+
+因为 list 既是 `Monoid` 也是 `Monad`，因此可以成为 `MonadPlus` 的实例/成员：
+
+```Haskell
+instance MonadPlus' [] where
+  mzero' = []
+  mplus' = (++)
+```
+
+`guard` 定义如下：
+
+```Haskell
+guard :: MonadPlus' m => Bool -> m ()
+guard True = return ()
+guard False = mzero'
+```
+
+* `mzero` 代表 failed computation；
+* `()` 读作 unit，类似 `data () = ()`；
+
+
