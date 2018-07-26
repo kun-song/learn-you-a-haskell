@@ -71,3 +71,14 @@ guard :: MonadPlus' m => Bool -> m ()
 guard True = return ()
 guard False = mzero'
 
+evenOnly :: [Int]
+evenOnly =
+  do
+    x <- [1, 2, 3, 4]
+    guard $ x `mod` 2 == 0
+    return x
+
+(<=<) :: Monad m => (b -> m c) -> (a -> m b) -> (a -> m c)
+f <=< g = \x -> g x >>= f
+
+

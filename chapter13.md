@@ -513,4 +513,197 @@ guard False = mzero'
 * `mzero` 代表 failed computation；
 * `()` 读作 unit，类似 `data () = ()`；
 
+`guard` 接受一个 `Bool` 参数，若：
+
+* `True`，则返回一个包含 `()` 的 minimal default context；
+* `False`，返回 failed monadic value；
+
+>为什么选择 `()` 值？因为使用 `guard` 时会 **忽略** 其返回值，而 `()` 没有什么含义，正好用来抛弃。
+
+```Haskell
+λ> guard (5 > 1) :: [()]
+[()]
+λ> guard (5 > 10) :: [()]
+[]
+```
+
+* `[()]`：minimal default context with value `()`
+* `[]` failed monadic value
+
+`guard` + `>>` 可实现过滤：
+
+```Haskell
+λ> [1, 2, 3, 4] >>= (\x -> (guard $ x `mod` 2 == 0) >> return x)
+[2,4]
+```
+
+分析：
+
+* 当 `guard` 条件为 `True` 时，结果为无意义的 `return ()`，`>>` 将忽略 `return ()`，并提供有意义的值；
+* 当 `guard` 条件为 `False` 时，结果为 `mzero`，对于 list 而言为 `[]`，可以认为是 failed monadic value，`>>` 将立即停止计算；
+
+改写为 `do` 表达式：
+
+```Haskell
+evenOnly :: [Int]
+evenOnly =
+  do
+    x <- [1, 2, 3, 4]
+    guard $ x `mod` 2 == 0
+    return x
+```
+
+等价于 list 推导：
+
+```Haskell
+λ> [x | x <- [1, 2, 3, 4], x `mod` 2 == 0]
+[2,4]
+```
+
+## Monad 法则
+
+类似 `Functor` 和 `Applicative`，仅仅通过 `instance` 关键字将某 type 变成 `Monad` typeclass 的实例，并不意味该 type 成为了 monad，这只是语法上的东西，type 必须满足 monad 法则，才能称之为 monad。
+
+type 成为 monad 的条件：
+
+* `instance` 为该 type 实现 `Monad` typeclass 实例；
+* 遵守 monad 法则；
+
+Haskell 语法上允许任意 type 成为任意 typeclass 的实例，但 Haskell 无法检测各 typeclass 的法则是否被满足。标准库中的实例肯定是满足的，但当使用自定义类型时，需要特别注意这点。
+
+### Left Identity
+
+若用 `return` 将一个值放到 default minimal context 中，然后借助 `>>=` 将其应用于函数，该过程等价于将该值直接应用于该函数（即不使用 `>>=`）：
+
+```Haskell
+return x >>= f 等价于 f x
+```
+
+因为 `return` 是将 `x` 放在 default minimal context 中，该 context 非常非常小，该 monadic value 其实只有一个值，即使从直觉上看，也与 `f x` 没有区别。
+
+`Maybe`：
+
+```Haskell
+λ> return 10 >>= \x -> Just $ x + 1
+Just 11
+λ> (\x -> Just $ x + 1) 10
+Just 11
+```
+
+* `return = Just`
+
+list：
+
+```Haskell
+λ> return 10 >>= \x -> [x, -x]
+[10,-10]
+λ> (\x -> [x, -x]) 10
+[10,-10]
+```
+
+* `return x = [x]`
+
+### Right Identity
+
+若有一个 monadic value，通过 `>>=` 将其应用于 `return` 函数，结果为原本的 monadic value：
+
+```Haskell
+m >>= return 等价于 m
+```
+
+例子：
+
+```Haskell
+λ> Just "Hello" >>= return
+Just "Hello"
+λ> [1, 2, 3, 4] >>= return
+[1,2,3,4]
+λ> putStrLn "Hello" >>= return
+Hello
+```
+
+对于 list monad，`>>=` 实现为：
+
+```Haskell
+xs >>= f = concat $ map f xs
+```
+
+当 `f` 为 `return` 时，`[1, 2, 3, 4] >>= return` 首先将 `return` map 到每个元素上，得到 `[[1], [2], [3], [4]]`，然后用 `concat` 拍平之，结果还是 `[1, 2, 3, 4]`。
+
+### Associativity
+
+若有多个用 `>>=` 串联的 monadic function，则各个 monadic function 的嵌套方式不影响结果：
+
+```Haskell
+m >>= f >>= g 等价于 m >>= (\x -> f x >>= g)
+```
+
+结合律在走钢丝里体现很明显：
+
+```Haskell
+return (0,0) >>= landRight 2 >>= landLeft 2 >>= landRight 2
+```
+
+应该等价于：
+
+```Haskell
+return (0,0) >>= (\x -> landRight 2 x >>= (\y -> landLeft 2 y >>= (\z -> landRight 2 z))) 
+```
+
+### 从函数组合的角度看 monad 法则
+
+`(.)` 用于组合函数，它实现如下：
+
+```Haskell
+(.) :: (b -> c) -> (a -> b) -> (a -> c)
+f . g = \x -> f $ g x
+```
+
+如果 `f` 和 `g` 都是 monadic function，即 `b -> m c` 和 `a -> m b`，必须借助 `>>=` 才能组合它们：
+
+```Haskell
+(<=<) :: Monad m => (b -> m c) -> (a -> m b) -> (a -> m c)
+f <=< g = \x -> g x >>= f
+```
+
+使用：
+
+```Haskell
+λ> let f x = [x, -x]
+λ> let g x = [x + 1, x + 2]
+
+λ> let h = f <=< g
+λ> h 2
+[3,-3,4,-4]
+
+λ> let k = g <=< f
+λ> k 2
+[3,4,-1,0]
+```
+
+借助 `<=<`，结合律可以表示为：
+
+```Haskell
+f <=< g <=< h 等价于 f <=< (g <=< h)
+```
+
+left identity 原本为：
+
+```Haskell
+return x >>= f === f x
+```
+
+`return x >>= f` 可以改写为 `f <=< return`，所以 left identity 可以写作：
+
+```Haskell
+f <=< return 等价于 f
+```
+
+同样 right identity `m >>= return` 可以写作：
+
+```
+return <=< f 等价于 f
+```
+
+* `f` 是产生 `m` 的 monadic function；
 
